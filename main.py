@@ -1,7 +1,12 @@
+import asyncio
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
 import os
 import re
 import json
-import asyncio
 from flask import Flask
 from threading import Thread
 from pyrogram import Client, filters
