@@ -26,7 +26,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Group Guard Bot (No-MongoDB Version) is Running Alive!"
+    return "Group Guard Bot (Premium Version) is Running Alive!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -89,24 +89,39 @@ bot = Client(
     bot_token=BOT_TOKEN
 )
 
+# ================= KEYBOARDS =================
+def admin_main_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📊 Managed Groups", callback_data="admin_groups"),
+         InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast")],
+        [InlineKeyboardButton("👑 Promote Admin", callback_data="admin_promote_list")]
+    ])
+
+def back_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Back to Panel", callback_data="admin_main_menu")]
+    ])
+
 # ================= COMMANDS & HANDLERS =================
 
-# Start Command
+# Start Command (Clean & Professional)
 @bot.on_message(filters.command("start") & filters.private)
 async def start_handler(client: Client, message: Message):
+    bot_info = await client.get_me()
     text = (
-        f"👋 **Namaste {message.from_user.mention}!**\n\n"
-        "🛡️ Main ek **Group Guard & Protection Bot** hu.\n"
-        "Aap mujhe apne group me add karke admin bana sakte hain, main aapke group ko secure rakhunga.\n\n"
-        "⚙️ **Mere Safety Features:**\n"
-        "1. 👤 **Bio Link Check:** Bio me link hone par 3 warning ke baad **MUTE**.\n"
-        "2. 🔗 **Link Spam Protection:** Group me link bhejne par 3 warning ke baad **MUTE**.\n"
-        "3. ⏩ **Forward Message Check:** Forwarded messages par 3 warning ke baad **MUTE**.\n"
-        "4. 🤬 **Bad Words Filter:** Abusive language use karne par 3 warning ke baad **BAN**.\n\n"
-        "📌 **Kaise use karein?**\n"
-        "Bas mujhe apne group me add karein aur **Admin Permissions** de dein!"
+        f"🛡️ **Welcome to Group Guard Bot**\n\n"
+        f"Hello {message.from_user.mention}! Main aapke Telegram groups ko spam, links, forward messages aur bad words se secure rakhne ke liye taiyar hu.\n\n"
+        f"✨ **Features:**\n"
+        f"• Anti-Link & Anti-Forward\n"
+        f"• Bio Link Protection\n"
+        f"• Bad Word Auto-Ban\n"
+        f"• 3 Warning System\n\n"
+        f"👉 Mujhe apne group me add karein aur **Admin** banayein!"
     )
-    await message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Add Me To Your Group", url=f"https://t.me/{bot_info.username}?startgroup=true")]
+    ])
+    await message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
 
 # Auto Track Group & Bot Admin Status
 @bot.on_chat_member_updated()
@@ -117,7 +132,7 @@ async def group_status_check(client: Client, event):
             try:
                 link = await client.export_chat_invite_link(chat.id)
             except Exception:
-                link = "No Link Available (Permission Missing)"
+                link = "No Link Available"
             add_group(chat.id, chat.title, link)
         elif event.new_chat_member.status in [ChatMemberStatus.LEFT, ChatMemberStatus.BANNED]:
             remove_group(chat.id)
@@ -128,14 +143,12 @@ async def admin_panel(client: Client, message: Message):
     if message.from_user.id != OWNER_ID:
         return
     
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 Groups List", callback_data="admin_groups")],
-        [InlineKeyboardButton("📢 Broadcast Message", callback_data="admin_broadcast")],
-        [InlineKeyboardButton("👑 Promote Admin in Group", callback_data="admin_promote_list")]
-    ])
-    await message.reply_text("👑 **Welcome Admin Panel**\nKripya neeche diye gaye option choose karein:", reply_markup=keyboard)
+    await message.reply_text(
+        "👑 **Bot Owner Control Panel**\n\nNeeche diye gaye buttons se apne bot ko manage karein:",
+        reply_markup=admin_main_keyboard()
+    )
 
-# Callback Queries for Admin Buttons
+# Callback Queries with Back Button Support
 @bot.on_callback_query()
 async def callback_handler(client: Client, query: CallbackQuery):
     if query.from_user.id != OWNER_ID:
@@ -145,44 +158,58 @@ async def callback_handler(client: Client, query: CallbackQuery):
     data_str = query.data
     data = load_data()
 
-    # 1. Groups List Button
-    if data_str == "admin_groups":
+    if data_str == "admin_main_menu":
+        await query.message.edit_text(
+            "👑 **Bot Owner Control Panel**\n\nNeeche diye gaye buttons se apne bot ko manage karein:",
+            reply_markup=admin_main_keyboard()
+        )
+
+    elif data_str == "admin_groups":
         groups = data.get("groups", {})
         if not groups:
-            await query.message.edit_text("❌ Abhi tak koi group saved nahi hai.")
+            await query.message.edit_text("❌ Abhi tak koi group saved nahi hai.", reply_markup=back_keyboard())
             return
         
-        msg = "📋 **Bot Admin Groups List:**\n\n"
+        msg = "📋 **Active Protected Groups:**\n\n"
         for i, (c_id, g_info) in enumerate(groups.items(), 1):
             msg += f"{i}. **{g_info['title']}**\n🔗 {g_info['link']}\n\n"
         
-        await query.message.edit_text(msg, disable_web_page_preview=True)
+        await query.message.edit_text(msg, reply_markup=back_keyboard(), disable_web_page_preview=True)
 
-    # 2. Broadcast Option
     elif data_str == "admin_broadcast":
-        await query.message.edit_text("📢 **Broadcast Message:**\n\nKripya kisi bhi message ke saath reply me `/bc <message>` likhein broadcast karne ke liye.")
+        msg = (
+            "📢 **Broadcast Center**\n\n"
+            "Sabhi groups me message bhejne ke liye is format me reply karein:\n"
+            "`/bc Aapka message yaha`"
+        )
+        await query.message.edit_text(msg, reply_markup=back_keyboard(), parse_mode=ParseMode.MARKDOWN)
 
-    # 3. Promote Admin Group List
     elif data_str == "admin_promote_list":
         groups = data.get("groups", {})
         if not groups:
-            await query.message.edit_text("❌ Kisi bhi group me bot admin nahi hai.")
+            await query.message.edit_text("❌ Kisi bhi group me bot admin nahi hai.", reply_markup=back_keyboard())
             return
 
         buttons = []
         for c_id, g_info in groups.items():
             buttons.append([InlineKeyboardButton(g_info['title'], callback_data=f"prom_{c_id}")])
         
+        buttons.append([InlineKeyboardButton("⬅️ Back to Panel", callback_data="admin_main_menu")])
         keyboard = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text("👑 Select Group jisme aap kisi user ko Admin banana chahte hain:", reply_markup=keyboard)
+        await query.message.edit_text("👑 Select group jisme aap admin promote karna chahte hain:", reply_markup=keyboard)
 
     elif data_str.startswith("prom_"):
         chat_id = data_str.split("_")[1]
-        await query.message.edit_text(
-            f"🎯 Group ID: `{chat_id}` selected.\n\n"
-            f"User ko admin banane ke liye command bheje:\n"
+        msg = (
+            f"🎯 **Group Selected**\n\n"
+            f"Target Group ID: `{chat_id}`\n\n"
+            f"User ko admin banane ke liye private me ye command bheje:\n"
             f"`/makeadmin {chat_id} @username`"
         )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ Back to Groups", callback_data="admin_promote_list")]
+        ])
+        await query.message.edit_text(msg, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
 
 # Broadcast Command Handler
 @bot.on_message(filters.command("bc") & filters.private)
@@ -207,7 +234,7 @@ async def broadcast_cmd(client: Client, message: Message):
         except Exception:
             failed += 1
 
-    await message.reply_text(f"✅ Broadcast Done!\n\nSuccess: {success}\nFailed: {failed}")
+    await message.reply_text(f"✅ **Broadcast Completed!**\n\nSuccess: {success}\nFailed: {failed}")
 
 # Make Admin via Bot Command Handler
 @bot.on_message(filters.command("makeadmin") & filters.private)
@@ -215,7 +242,7 @@ async def make_admin_cmd(client: Client, message: Message):
     if message.from_user.id != OWNER_ID:
         return
     if len(message.command) < 3:
-        await message.reply_text("⚠️ Syntax: `/makeadmin <chat_id> <username_ya_id>`")
+        await message.reply_text("⚠️ Syntax: `/makeadmin <chat_id> <username>`")
         return
 
     try:
@@ -235,9 +262,9 @@ async def make_admin_cmd(client: Client, message: Message):
                 can_promote_members=False
             )
         )
-        await message.reply_text(f"✅ User {user.mention} successfully **Group me Admin** ban chuka hai!")
+        await message.reply_text(f"✅ User {user.mention} successfully **Admin** ban chuka hai!")
     except Exception as e:
-        await message.reply_text(f"❌ Failed to promote admin:\n`{e}`")
+        await message.reply_text(f"❌ Failed:\n`{e}`")
 
 # ================= GROUP PROTECTION ENGINE =================
 
@@ -257,23 +284,7 @@ async def protection_engine(client: Client, message: Message):
     except Exception:
         pass
 
-    # 1. CHECK BIO LINK
-    try:
-        user_full = await client.get_users(user_id)
-        if user_full.bio and ("http://" in user_full.bio or "https://" in user_full.bio or "t.me/" in user_full.bio):
-            warns = add_warn(chat_id, user_id)
-            if warns >= 3:
-                await client.restrict_chat_member(chat_id, user_id, ChatPermissions())
-                reset_warns(chat_id, user_id)
-                await message.reply_text(f"🚫 {message.from_user.mention} ko **Bio me Link** hone ke kaaran 3 warnings ke baad **MUTE** kar diya gaya hai!")
-                return
-            else:
-                await message.reply_text(f"⚠️ **Warning {warns}/3** - {message.from_user.mention}! Aapke Bio me link hai, kripya ise hatayein varna aap MUTE ho jayenge.")
-                return
-    except Exception:
-        pass
-
-    # 2. CHECK BAD WORDS
+    # 1. CHECK BAD WORDS (Auto Ban on 3 Warnings)
     text = message.text or message.caption or ""
     if any(word in text.lower() for word in BAD_WORDS):
         await message.delete()
@@ -281,33 +292,33 @@ async def protection_engine(client: Client, message: Message):
         if warns >= 3:
             await client.ban_chat_member(chat_id, user_id)
             reset_warns(chat_id, user_id)
-            await client.send_message(chat_id, f"🔨 {message.from_user.mention} ko **Abusive Language** use karne par 3 warnings ke baad **BAN** kar diya gaya hai!")
+            await client.send_message(chat_id, f"🔨 **BANNED!**\n👤 {message.from_user.mention} ko 3 warnings ke baad **Abusive Language** ke karan ban kar diya gaya hai.")
         else:
-            await client.send_message(chat_id, f"⚠️ **Warning {warns}/3** - {message.from_user.mention}! Group me gaali/galt shabdh allowed nahi hai.")
+            await client.send_message(chat_id, f"⚠️ **WARNING ({warns}/3)**\n👤 {message.from_user.mention}, gaali ya galat shabd use na karein!")
         return
 
-    # 3. CHECK LINKS IN MESSAGE
+    # 2. CHECK LINKS IN MESSAGE (Mute on 3 Warnings)
     if re.search(r'(https?://[^\s]+|t\.me/[^\s]+)', text):
         await message.delete()
         warns = add_warn(chat_id, user_id)
         if warns >= 3:
             await client.restrict_chat_member(chat_id, user_id, ChatPermissions())
             reset_warns(chat_id, user_id)
-            await client.send_message(chat_id, f"🚫 {message.from_user.mention} ko **Link bhejne** ke kaaran 3 warnings ke baad **MUTE** kar diya gaya hai!")
+            await client.send_message(chat_id, f"🚫 **MUTED!**\n👤 {message.from_user.mention} ko 3 warnings ke baad **Link Spam** karne par mute kar diya gaya hai.")
         else:
-            await client.send_message(chat_id, f"⚠️ **Warning {warns}/3** - {message.from_user.mention}! Group me Link bhejna mana hai.")
+            await client.send_message(chat_id, f"⚠️ **WARNING ({warns}/3)**\n👤 {message.from_user.mention}, group me link bhejna mana hai!")
         return
 
-    # 4. CHECK FORWARD MESSAGES
+    # 3. CHECK FORWARD MESSAGES (Mute on 3 Warnings)
     if message.forward_date or message.forward_from or message.forward_from_chat:
         await message.delete()
         warns = add_warn(chat_id, user_id)
         if warns >= 3:
             await client.restrict_chat_member(chat_id, user_id, ChatPermissions())
             reset_warns(chat_id, user_id)
-            await client.send_message(chat_id, f"🚫 {message.from_user.mention} ko **Message Forward** karne ke kaaran 3 warnings ke baad **MUTE** kar diya gaya hai!")
+            await client.send_message(chat_id, f"🚫 **MUTED!**\n👤 {message.from_user.mention} ko 3 warnings ke baad **Message Forward** karne par mute kar diya gaya hai.")
         else:
-            await client.send_message(chat_id, f"⚠️ **Warning {warns}/3** - {message.from_user.mention}! Group me Message forward karna mana hai.")
+            await client.send_message(chat_id, f"⚠️ **WARNING ({warns}/3)**\n👤 {message.from_user.mention}, message forward karna mana hai!")
         return
 
 # Start Flask Web Server & Pyrogram Client
