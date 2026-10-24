@@ -26,7 +26,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Group Guard Bot (Premium Version) is Running Alive!"
+    return "Group Guard Bot (Clean Start Version) is Running Alive!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -102,28 +102,56 @@ def back_keyboard():
         [InlineKeyboardButton("⬅️ Back to Panel", callback_data="admin_main_menu")]
     ])
 
+async def get_bot_username(client):
+    me = await client.get_me()
+    return me.username
+
+# ================= HELPER FOR PRO NOTIFICATIONS =================
+async def send_violation_alert(client, message, reason, action_text, warns):
+    bot_username = await get_bot_username(client)
+    user = message.from_user
+    name = user.first_name
+    username = f"@{user.username}" if user.username else "No Username"
+    
+    if warns < 3:
+        status_msg = f"⚠️ Warning ({warns}/3)"
+    else:
+        status_msg = f"🚨 Action: {action_text.upper()}"
+
+    text = (
+        f"🛡️ **GROUP PROTECTION ALERT**\n\n"
+        f"👤 **Name:** {name}\n"
+        f"🏷️ **Username:** {username}\n"
+        f"📌 **Reason:** {reason}\n"
+        f"⚡ **Status:** {status_msg}"
+    )
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🛡️ Protect Your Group", url=f"https://t.me/{bot_username}?startgroup=true")]
+    ])
+
+    await message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
+
 # ================= COMMANDS & HANDLERS =================
 
-# Start Command (Clean & Professional)
 @bot.on_message(filters.command("start") & filters.private)
 async def start_handler(client: Client, message: Message):
-    bot_info = await client.get_me()
+    bot_username = await get_bot_username(client)
     text = (
-        f"🛡️ **Welcome to Group Guard Bot**\n\n"
-        f"Hello {message.from_user.mention}! Main aapke Telegram groups ko spam, links, forward messages aur bad words se secure rakhne ke liye taiyar hu.\n\n"
-        f"✨ **Features:**\n"
+        f"⚡ **Welcome to Group Guard**\n\n"
+        f"Hello {message.from_user.mention}! Main aapke Telegram groups ko spam, links aur bad words se secure rakhne ke liye taiyar hu.\n\n"
+        f"🚀 **Core Features:**\n"
         f"• Anti-Link & Anti-Forward\n"
         f"• Bio Link Protection\n"
         f"• Bad Word Auto-Ban\n"
-        f"• 3 Warning System\n\n"
-        f"👉 Mujhe apne group me add karein aur **Admin** banayein!"
+        f"• 3-Warning Action System\n\n"
+        f"👇 Mujhe apne group me add karne ke liye niche click karein!"
     )
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ Add Me To Your Group", url=f"https://t.me/{bot_info.username}?startgroup=true")]
+        [InlineKeyboardButton("➕ Add Me To Your Group", url=f"https://t.me/{bot_username}?startgroup=true")]
     ])
     await message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
 
-# Auto Track Group & Bot Admin Status
 @bot.on_chat_member_updated()
 async def group_status_check(client: Client, event):
     chat = event.chat
@@ -137,7 +165,6 @@ async def group_status_check(client: Client, event):
         elif event.new_chat_member.status in [ChatMemberStatus.LEFT, ChatMemberStatus.BANNED]:
             remove_group(chat.id)
 
-# Admin Dashboard (Owner Only)
 @bot.on_message(filters.command("admin") & filters.private)
 async def admin_panel(client: Client, message: Message):
     if message.from_user.id != OWNER_ID:
@@ -148,7 +175,6 @@ async def admin_panel(client: Client, message: Message):
         reply_markup=admin_main_keyboard()
     )
 
-# Callback Queries with Back Button Support
 @bot.on_callback_query()
 async def callback_handler(client: Client, query: CallbackQuery):
     if query.from_user.id != OWNER_ID:
@@ -211,7 +237,6 @@ async def callback_handler(client: Client, query: CallbackQuery):
         ])
         await query.message.edit_text(msg, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
 
-# Broadcast Command Handler
 @bot.on_message(filters.command("bc") & filters.private)
 async def broadcast_cmd(client: Client, message: Message):
     if message.from_user.id != OWNER_ID:
@@ -236,7 +261,6 @@ async def broadcast_cmd(client: Client, message: Message):
 
     await message.reply_text(f"✅ **Broadcast Completed!**\n\nSuccess: {success}\nFailed: {failed}")
 
-# Make Admin via Bot Command Handler
 @bot.on_message(filters.command("makeadmin") & filters.private)
 async def make_admin_cmd(client: Client, message: Message):
     if message.from_user.id != OWNER_ID:
@@ -284,7 +308,23 @@ async def protection_engine(client: Client, message: Message):
     except Exception:
         pass
 
-    # 1. CHECK BAD WORDS (Auto Ban on 3 Warnings)
+    # 1. CHECK BIO LINK (3 Warnings -> Mute)
+    try:
+        user_chat = await client.get_chat(user_id)
+        if user_chat.bio:
+            bio_text = user_chat.bio.lower()
+            if "http://" in bio_text or "https://" in bio_text or "t.me/" in bio_text or ".com" in bio_text:
+                await message.delete()
+                warns = add_warn(chat_id, user_id)
+                if warns >= 3:
+                    await client.restrict_chat_member(chat_id, user_id, ChatPermissions())
+                    reset_warns(chat_id, user_id)
+                await send_violation_alert(client, message, "Link found in Profile Bio", "Muted", warns)
+                return
+    except Exception:
+        pass
+
+    # 2. CHECK BAD WORDS (3 Warnings -> Ban)
     text = message.text or message.caption or ""
     if any(word in text.lower() for word in BAD_WORDS):
         await message.delete()
@@ -292,33 +332,36 @@ async def protection_engine(client: Client, message: Message):
         if warns >= 3:
             await client.ban_chat_member(chat_id, user_id)
             reset_warns(chat_id, user_id)
-            await client.send_message(chat_id, f"🔨 **BANNED!**\n👤 {message.from_user.mention} ko 3 warnings ke baad **Abusive Language** ke karan ban kar diya gaya hai.")
+            action = "Banned"
         else:
-            await client.send_message(chat_id, f"⚠️ **WARNING ({warns}/3)**\n👤 {message.from_user.mention}, gaali ya galat shabd use na karein!")
+            action = "Warning Issued"
+        await send_violation_alert(client, message, "Abusive Language / Bad Words", action, warns)
         return
 
-    # 2. CHECK LINKS IN MESSAGE (Mute on 3 Warnings)
+    # 3. CHECK LINKS IN MESSAGE (3 Warnings -> Mute)
     if re.search(r'(https?://[^\s]+|t\.me/[^\s]+)', text):
         await message.delete()
         warns = add_warn(chat_id, user_id)
         if warns >= 3:
             await client.restrict_chat_member(chat_id, user_id, ChatPermissions())
             reset_warns(chat_id, user_id)
-            await client.send_message(chat_id, f"🚫 **MUTED!**\n👤 {message.from_user.mention} ko 3 warnings ke baad **Link Spam** karne par mute kar diya gaya hai.")
+            action = "Muted"
         else:
-            await client.send_message(chat_id, f"⚠️ **WARNING ({warns}/3)**\n👤 {message.from_user.mention}, group me link bhejna mana hai!")
+            action = "Warning Issued"
+        await send_violation_alert(client, message, "Sending Links in Group", action, warns)
         return
 
-    # 3. CHECK FORWARD MESSAGES (Mute on 3 Warnings)
+    # 4. CHECK FORWARD MESSAGES (3 Warnings -> Mute)
     if message.forward_date or message.forward_from or message.forward_from_chat:
         await message.delete()
         warns = add_warn(chat_id, user_id)
         if warns >= 3:
             await client.restrict_chat_member(chat_id, user_id, ChatPermissions())
             reset_warns(chat_id, user_id)
-            await client.send_message(chat_id, f"🚫 **MUTED!**\n👤 {message.from_user.mention} ko 3 warnings ke baad **Message Forward** karne par mute kar diya gaya hai.")
+            action = "Muted"
         else:
-            await client.send_message(chat_id, f"⚠️ **WARNING ({warns}/3)**\n👤 {message.from_user.mention}, message forward karna mana hai!")
+            action = "Warning Issued"
+        await send_violation_alert(client, message, "Forwarding Messages", action, warns)
         return
 
 # Start Flask Web Server & Pyrogram Client
