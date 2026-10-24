@@ -26,7 +26,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Group Guard Bot (Clean Start Version) is Running Alive!"
+    return "Group Guard Bot (Clean HTML Version) is Running Alive!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -119,28 +119,29 @@ async def send_violation_alert(client, message, reason, action_text, warns):
         status_msg = f"🚨 Action: {action_text.upper()}"
 
     text = (
-        f"🛡️ **GROUP PROTECTION ALERT**\n\n"
-        f"👤 **Name:** {name}\n"
-        f"🏷️ **Username:** {username}\n"
-        f"📌 **Reason:** {reason}\n"
-        f"⚡ **Status:** {status_msg}"
+        f"🛡️ <b>GROUP PROTECTION ALERT</b>\n\n"
+        f"👤 <b>Name:</b> {name}\n"
+        f"🏷️ <b>Username:</b> {username}\n"
+        f"📌 <b>Reason:</b> {reason}\n"
+        f"⚡ <b>Status:</b> {status_msg}"
     )
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🛡️ Protect Your Group", url=f"https://t.me/{bot_username}?startgroup=true")]
     ])
 
-    await message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
+    await message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
 # ================= COMMANDS & HANDLERS =================
 
 @bot.on_message(filters.command("start") & filters.private)
 async def start_handler(client: Client, message: Message):
     bot_username = await get_bot_username(client)
+    user_mention = message.from_user.mention
     text = (
-        f"⚡ **Welcome to Group Guard**\n\n"
-        f"Hello {message.from_user.mention}! Main aapke Telegram groups ko spam, links aur bad words se secure rakhne ke liye taiyar hu.\n\n"
-        f"🚀 **Core Features:**\n"
+        f"⚡ <b>Welcome to Group Guard</b>\n\n"
+        f"Hello {user_mention}! Main aapke Telegram groups ko spam, links aur bad words se secure rakhne ke liye taiyar hu.\n\n"
+        f"🚀 <b>Core Features:</b>\n"
         f"• Anti-Link & Anti-Forward\n"
         f"• Bio Link Protection\n"
         f"• Bad Word Auto-Ban\n"
@@ -150,7 +151,7 @@ async def start_handler(client: Client, message: Message):
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("➕ Add Me To Your Group", url=f"https://t.me/{bot_username}?startgroup=true")]
     ])
-    await message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
+    await message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
 @bot.on_chat_member_updated()
 async def group_status_check(client: Client, event):
@@ -171,8 +172,9 @@ async def admin_panel(client: Client, message: Message):
         return
     
     await message.reply_text(
-        "👑 **Bot Owner Control Panel**\n\nNeeche diye gaye buttons se apne bot ko manage karein:",
-        reply_markup=admin_main_keyboard()
+        "👑 <b>Bot Owner Control Panel</b>\n\nNeeche diye gaye buttons se apne bot ko manage karein:",
+        reply_markup=admin_main_keyboard(),
+        parse_mode=ParseMode.HTML
     )
 
 @bot.on_callback_query()
@@ -186,34 +188,35 @@ async def callback_handler(client: Client, query: CallbackQuery):
 
     if data_str == "admin_main_menu":
         await query.message.edit_text(
-            "👑 **Bot Owner Control Panel**\n\nNeeche diye gaye buttons se apne bot ko manage karein:",
-            reply_markup=admin_main_keyboard()
+            "👑 <b>Bot Owner Control Panel</b>\n\nNeeche diye gaye buttons se apne bot ko manage karein:",
+            reply_markup=admin_main_keyboard(),
+            parse_mode=ParseMode.HTML
         )
 
     elif data_str == "admin_groups":
         groups = data.get("groups", {})
         if not groups:
-            await query.message.edit_text("❌ Abhi tak koi group saved nahi hai.", reply_markup=back_keyboard())
+            await query.message.edit_text("❌ Abhi tak koi group saved nahi hai.", reply_markup=back_keyboard(), parse_mode=ParseMode.HTML)
             return
         
-        msg = "📋 **Active Protected Groups:**\n\n"
+        msg = "📋 <b>Active Protected Groups:</b>\n\n"
         for i, (c_id, g_info) in enumerate(groups.items(), 1):
-            msg += f"{i}. **{g_info['title']}**\n🔗 {g_info['link']}\n\n"
+            msg += f"{i}. <b>{g_info['title']}</b>\n🔗 {g_info['link']}\n\n"
         
-        await query.message.edit_text(msg, reply_markup=back_keyboard(), disable_web_page_preview=True)
+        await query.message.edit_text(msg, reply_markup=back_keyboard(), disable_web_page_preview=True, parse_mode=ParseMode.HTML)
 
     elif data_str == "admin_broadcast":
         msg = (
-            "📢 **Broadcast Center**\n\n"
+            "📢 <b>Broadcast Center</b>\n\n"
             "Sabhi groups me message bhejne ke liye is format me reply karein:\n"
-            "`/bc Aapka message yaha`"
+            "<code>/bc Aapka message yaha</code>"
         )
-        await query.message.edit_text(msg, reply_markup=back_keyboard(), parse_mode=ParseMode.MARKDOWN)
+        await query.message.edit_text(msg, reply_markup=back_keyboard(), parse_mode=ParseMode.HTML)
 
     elif data_str == "admin_promote_list":
         groups = data.get("groups", {})
         if not groups:
-            await query.message.edit_text("❌ Kisi bhi group me bot admin nahi hai.", reply_markup=back_keyboard())
+            await query.message.edit_text("❌ Kisi bhi group me bot admin nahi hai.", reply_markup=back_keyboard(), parse_mode=ParseMode.HTML)
             return
 
         buttons = []
@@ -222,27 +225,27 @@ async def callback_handler(client: Client, query: CallbackQuery):
         
         buttons.append([InlineKeyboardButton("⬅️ Back to Panel", callback_data="admin_main_menu")])
         keyboard = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text("👑 Select group jisme aap admin promote karna chahte hain:", reply_markup=keyboard)
+        await query.message.edit_text("👑 Select group jisme aap admin promote karna chahte hain:", reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
     elif data_str.startswith("prom_"):
         chat_id = data_str.split("_")[1]
         msg = (
-            f"🎯 **Group Selected**\n\n"
-            f"Target Group ID: `{chat_id}`\n\n"
+            f"🎯 <b>Group Selected</b>\n\n"
+            f"Target Group ID: <code>{chat_id}</code>\n\n"
             f"User ko admin banane ke liye private me ye command bheje:\n"
-            f"`/makeadmin {chat_id} @username`"
+            f"<code>/makeadmin {chat_id} @username</code>"
         )
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ Back to Groups", callback_data="admin_promote_list")]
         ])
-        await query.message.edit_text(msg, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
+        await query.message.edit_text(msg, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
 @bot.on_message(filters.command("bc") & filters.private)
 async def broadcast_cmd(client: Client, message: Message):
     if message.from_user.id != OWNER_ID:
         return
     if len(message.command) < 2:
-        await message.reply_text("⚠️ Use: `/bc Aapka message yaha`")
+        await message.reply_text("⚠️ Use: <code>/bc Aapka message yaha</code>", parse_mode=ParseMode.HTML)
         return
 
     text = message.text.split(None, 1)[1]
@@ -259,14 +262,14 @@ async def broadcast_cmd(client: Client, message: Message):
         except Exception:
             failed += 1
 
-    await message.reply_text(f"✅ **Broadcast Completed!**\n\nSuccess: {success}\nFailed: {failed}")
+    await message.reply_text(f"✅ <b>Broadcast Completed!</b>\n\nSuccess: {success}\nFailed: {failed}", parse_mode=ParseMode.HTML)
 
 @bot.on_message(filters.command("makeadmin") & filters.private)
 async def make_admin_cmd(client: Client, message: Message):
     if message.from_user.id != OWNER_ID:
         return
     if len(message.command) < 3:
-        await message.reply_text("⚠️ Syntax: `/makeadmin <chat_id> <username>`")
+        await message.reply_text("⚠️ Syntax: <code>/makeadmin &lt;chat_id&gt; &lt;username&gt;</code>", parse_mode=ParseMode.HTML)
         return
 
     try:
@@ -286,9 +289,9 @@ async def make_admin_cmd(client: Client, message: Message):
                 can_promote_members=False
             )
         )
-        await message.reply_text(f"✅ User {user.mention} successfully **Admin** ban chuka hai!")
+        await message.reply_text(f"✅ User {user.mention} successfully <b>Admin</b> ban chuka hai!", parse_mode=ParseMode.HTML)
     except Exception as e:
-        await message.reply_text(f"❌ Failed:\n`{e}`")
+        await message.reply_text(f"❌ Failed:\n<code>{e}</code>", parse_mode=ParseMode.HTML)
 
 # ================= GROUP PROTECTION ENGINE =================
 
