@@ -26,7 +26,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Group Guard Bot (Clean HTML Version) is Running Alive!"
+    return "Group Guard Bot (Clean Alert Version) is Running Alive!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -119,7 +119,6 @@ async def send_violation_alert(client, message, reason, action_text, warns):
         status_msg = f"🚨 Action: {action_text.upper()}"
 
     text = (
-        f"🛡️ <b>GROUP PROTECTION ALERT</b>\n\n"
         f"👤 <b>Name:</b> {name}\n"
         f"🏷️ <b>Username:</b> {username}\n"
         f"📌 <b>Reason:</b> {reason}\n"
