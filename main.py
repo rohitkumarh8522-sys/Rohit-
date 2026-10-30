@@ -26,7 +26,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Group Guard Bot (Clean Alert Version) is Running Alive!"
+    return "Group Guard Bot (Auto-Delete Version) is Running Alive!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -37,12 +37,15 @@ DATA_FILE = "data.json"
 
 def load_data():
     if not os.path.exists(DATA_FILE):
-        return {"groups": {}, "warns": {}}
+        return {"groups": {}, "warns": {}, "autodelete": {}}
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+            if "autodelete" not in data:
+                data["autodelete"] = {}
+            return data
     except Exception:
-        return {"groups": {}, "warns": {}}
+        return {"groups": {}, "warns": {}, "autodelete": {}}
 
 def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -78,6 +81,15 @@ def reset_warns(chat_id, user_id):
     if key in data["warns"]:
         del data["warns"][key]
         save_data(data)
+
+def set_autodelete_time(chat_id, seconds):
+    data = load_data()
+    data["autodelete"][str(chat_id)] = seconds
+    save_data(data)
+
+def get_autodelete_time(chat_id):
+    data = load_data()
+    return data["autodelete"].get(str(chat_id), 0)
 
 # Bad words list
 BAD_WORDS = ["madarchod", "bhenchod", "bhosdike", "gaand", "chutiya", "harami", "fuck", "mc", "bc"]
@@ -144,6 +156,7 @@ async def start_handler(client: Client, message: Message):
         f"• Anti-Link & Anti-Forward\n"
         f"• Bio Link Protection\n"
         f"• Bad Word Auto-Ban\n"
+        f"• Auto-Delete Timer Support\n"
         f"• 3-Warning Action System\n\n"
         f"👇 Mujhe apne group me add karne ke liye niche click karein!"
     )
@@ -151,6 +164,45 @@ async def start_handler(client: Client, message: Message):
         [InlineKeyboardButton("➕ Add Me To Your Group", url=f"https://t.me/{bot_username}?startgroup=true")]
     ])
     await message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+
+# Auto-Delete Setup Command for Group Admins
+@bot.on_message(filters.command("autodelete") & filters.group)
+async def autodelete_command(client: Client, message: Message):
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+
+    # Check if user is admin or owner in the group
+    try:
+        member = await client.get_chat_member(chat_id, user_id)
+        if member.status not in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
+            await message.reply_text("⚠️ Ye command sirf group admins ke liye hai!", parse_mode=ParseMode.HTML)
+            return
+    except Exception:
+        return
+
+    if len(message.command) < 2:
+        current_time = get_autodelete_time(chat_id)
+        await message.reply_text(
+            f"⏱️ <b>Auto-Delete Settings:</b>\nCurrent Timer: <code>{current_time} seconds</code>\n\n"
+            f"Usage:\n/autodelete 30 (Set to 30 seconds)\n/autodelete off (Disable)",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    arg = message.command[1].lower()
+    if arg == "off":
+        set_autodelete_time(chat_id, 0)
+        await message.reply_text("✅ Auto-Delete feature has been <b>Disabled</b> for this group.", parse_mode=ParseMode.HTML)
+    else:
+        try:
+            seconds = int(arg)
+            if seconds < 5:
+                await message.reply_text("⚠️ Minimum auto-delete time 5 seconds honi chahiye.", parse_mode=ParseMode.HTML)
+                return
+            set_autodelete_time(chat_id, seconds)
+            await message.reply_text(f"✅ Auto-Delete timer set to <b>{seconds} seconds</b> successfully!", parse_mode=ParseMode.HTML)
+        except ValueError:
+            await message.reply_text("⚠️ Kripya valid number ya 'off' likhein. Example: `/autodelete 30`", parse_mode=ParseMode.HTML)
 
 @bot.on_chat_member_updated()
 async def group_status_check(client: Client, event):
@@ -292,6 +344,14 @@ async def make_admin_cmd(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"❌ Failed:\n<code>{e}</code>", parse_mode=ParseMode.HTML)
 
+# Background task for auto-deleting messages
+async def delayed_delete(message, delay):
+    await asyncio.sleep(delay)
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
 # ================= GROUP PROTECTION ENGINE =================
 
 @bot.on_message(filters.group & ~filters.service)
@@ -302,69 +362,77 @@ async def protection_engine(client: Client, message: Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
 
-    # Admin check (Skip admins)
+    # Admin check (Skip admins for protection rules)
+    is_admin = False
     try:
         member = await client.get_chat_member(chat_id, user_id)
         if member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
+            is_admin = True
+    except Exception:
+        pass
+
+    # If user is not admin, check protection rules
+    if not is_admin:
+        # 1. CHECK BIO LINK (3 Warnings -> Mute)
+        try:
+            user_chat = await client.get_chat(user_id)
+            if user_chat.bio:
+                bio_text = user_chat.bio.lower()
+                if "http://" in bio_text or "https://" in bio_text or "t.me/" in bio_text or ".com" in bio_text:
+                    await message.delete()
+                    warns = add_warn(chat_id, user_id)
+                    if warns >= 3:
+                        await client.restrict_chat_member(chat_id, user_id, ChatPermissions())
+                        reset_warns(chat_id, user_id)
+                    await send_violation_alert(client, message, "Link found in Profile Bio", "Muted", warns)
+                    return
+        except Exception:
+            pass
+
+        # 2. CHECK BAD WORDS (3 Warnings -> Ban)
+        text = message.text or message.caption or ""
+        if any(word in text.lower() for word in BAD_WORDS):
+            await message.delete()
+            warns = add_warn(chat_id, user_id)
+            if warns >= 3:
+                await client.ban_chat_member(chat_id, user_id)
+                reset_warns(chat_id, user_id)
+                action = "Banned"
+            else:
+                action = "Warning Issued"
+            await send_violation_alert(client, message, "Abusive Language / Bad Words", action, warns)
             return
-    except Exception:
-        pass
 
-    # 1. CHECK BIO LINK (3 Warnings -> Mute)
-    try:
-        user_chat = await client.get_chat(user_id)
-        if user_chat.bio:
-            bio_text = user_chat.bio.lower()
-            if "http://" in bio_text or "https://" in bio_text or "t.me/" in bio_text or ".com" in bio_text:
-                await message.delete()
-                warns = add_warn(chat_id, user_id)
-                if warns >= 3:
-                    await client.restrict_chat_member(chat_id, user_id, ChatPermissions())
-                    reset_warns(chat_id, user_id)
-                await send_violation_alert(client, message, "Link found in Profile Bio", "Muted", warns)
-                return
-    except Exception:
-        pass
+        # 3. CHECK LINKS IN MESSAGE (3 Warnings -> Mute)
+        if re.search(r'(https?://[^\s]+|t\.me/[^\s]+)', text):
+            await message.delete()
+            warns = add_warn(chat_id, user_id)
+            if warns >= 3:
+                await client.restrict_chat_member(chat_id, user_id, ChatPermissions())
+                reset_warns(chat_id, user_id)
+                action = "Muted"
+            else:
+                action = "Warning Issued"
+            await send_violation_alert(client, message, "Sending Links in Group", action, warns)
+            return
 
-    # 2. CHECK BAD WORDS (3 Warnings -> Ban)
-    text = message.text or message.caption or ""
-    if any(word in text.lower() for word in BAD_WORDS):
-        await message.delete()
-        warns = add_warn(chat_id, user_id)
-        if warns >= 3:
-            await client.ban_chat_member(chat_id, user_id)
-            reset_warns(chat_id, user_id)
-            action = "Banned"
-        else:
-            action = "Warning Issued"
-        await send_violation_alert(client, message, "Abusive Language / Bad Words", action, warns)
-        return
+        # 4. CHECK FORWARD MESSAGES (3 Warnings -> Mute)
+        if message.forward_date or message.forward_from or message.forward_from_chat:
+            await message.delete()
+            warns = add_warn(chat_id, user_id)
+            if warns >= 3:
+                await client.restrict_chat_member(chat_id, user_id, ChatPermissions())
+                reset_warns(chat_id, user_id)
+                action = "Muted"
+            else:
+                action = "Warning Issued"
+            await send_violation_alert(client, message, "Forwarding Messages", action, warns)
+            return
 
-    # 3. CHECK LINKS IN MESSAGE (3 Warnings -> Mute)
-    if re.search(r'(https?://[^\s]+|t\.me/[^\s]+)', text):
-        await message.delete()
-        warns = add_warn(chat_id, user_id)
-        if warns >= 3:
-            await client.restrict_chat_member(chat_id, user_id, ChatPermissions())
-            reset_warns(chat_id, user_id)
-            action = "Muted"
-        else:
-            action = "Warning Issued"
-        await send_violation_alert(client, message, "Sending Links in Group", action, warns)
-        return
-
-    # 4. CHECK FORWARD MESSAGES (3 Warnings -> Mute)
-    if message.forward_date or message.forward_from or message.forward_from_chat:
-        await message.delete()
-        warns = add_warn(chat_id, user_id)
-        if warns >= 3:
-            await client.restrict_chat_member(chat_id, user_id, ChatPermissions())
-            reset_warns(chat_id, user_id)
-            action = "Muted"
-        else:
-            action = "Warning Issued"
-        await send_violation_alert(client, message, "Forwarding Messages", action, warns)
-        return
+    # Check Auto-Delete Timer for normal group messages
+    del_time = get_autodelete_time(chat_id)
+    if del_time > 0:
+        asyncio.create_task(delayed_delete(message, del_time))
 
 # Start Flask Web Server & Pyrogram Client
 if __name__ == "__main__":
